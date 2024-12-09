@@ -41,6 +41,7 @@ class Humanoid_Batch:
 
     def __init__(self, mjcf_file = f"resources/robots/h1/h1.xml", extend_hand = True, extend_head = False, device = torch.device("cpu")):
         self.mjcf_data = mjcf_data = self.from_mjcf(mjcf_file)
+        ### 对于头部和手的特殊处理，注意臂长等参数是需要手动指定的。
         self.extend_hand = extend_hand
         self.extend_head = extend_head
         if extend_hand:
@@ -69,7 +70,7 @@ class Humanoid_Batch:
         self._local_rotation_mat = tRot.quaternion_to_matrix(self._local_rotation).float() # w, x, y ,z
         
     def from_mjcf(self, path):
-        # function from Poselib: 
+        # function from Poselib，利用etree把xml描述的机器人结构转化成mjcf骨骼树
         tree = ETree.parse(path)
         xml_doc_root = tree.getroot()
         xml_world_body = xml_doc_root.find("worldbody")
