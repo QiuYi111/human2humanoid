@@ -27,6 +27,8 @@ from tqdm.notebook import tqdm
 from smpl_sim.smpllib.smpl_joint_names import SMPL_MUJOCO_NAMES, SMPL_BONE_ORDER_NAMES, SMPLH_BONE_ORDER_NAMES, SMPLH_MUJOCO_NAMES
 from phc.utils.torch_h1_humanoid_batch import Humanoid_Batch, H1_ROTATION_AXIS
 
+#### Define corresonpdances between h1 and smpl joints 只是为了找出对应的索引
+
 h1_joint_names = [ 'pelvis', 
                    'left_hip_yaw_link', 'left_hip_roll_link','left_hip_pitch_link', 'left_knee_link', 'left_ankle_link',
                    'right_hip_yaw_link', 'right_hip_roll_link', 'right_hip_pitch_link', 'right_knee_link', 'right_ankle_link',
@@ -35,21 +37,23 @@ h1_joint_names = [ 'pelvis',
 
 
 h1_fk = Humanoid_Batch(extend_head=True) # load forward kinematics model
-#### Define corresonpdances between h1 and smpl joints
+
 h1_joint_names_augment = h1_joint_names + ["left_hand_link", "right_hand_link", "head_link"]
 h1_joint_pick = ['pelvis',  'left_hip_yaw_link', "left_knee_link", "left_ankle_link",  'right_hip_yaw_link', 'right_knee_link', 'right_ankle_link', "left_shoulder_roll_link", "left_elbow_link", "left_hand_link", "right_shoulder_roll_link", "right_elbow_link", "right_hand_link", "head_link"]
 smpl_joint_pick = ["Pelvis", "L_Hip",  "L_Knee", "L_Ankle",  "R_Hip", "R_Knee", "R_Ankle", "L_Shoulder", "L_Elbow", "L_Hand", "R_Shoulder", "R_Elbow", "R_Hand", "Head"]
+# 找出对应关节索引
 h1_joint_pick_idx = [ h1_joint_names_augment.index(j) for j in h1_joint_pick]
 smpl_joint_pick_idx = [SMPL_BONE_ORDER_NAMES.index(j) for j in smpl_joint_pick]
 
 
 #### Preparing fitting varialbes
 device = torch.device("cpu")
+# 除去骨盆，有22个关节
 pose_aa_h1 = np.repeat(np.repeat(sRot.identity().as_rotvec()[None, None, None, ], 22, axis = 2), 1, axis = 1)
 pose_aa_h1 = torch.from_numpy(pose_aa_h1).float()
 
-dof_pos = torch.zeros((1, 19))
-pose_aa_h1 = torch.cat([torch.zeros((1, 1, 3)), H1_ROTATION_AXIS * dof_pos[..., None], torch.zeros((1, 2, 3))], axis = 1)
+dof_pos = torch.zeros((1, 19))#因为除去了头和手的自由度，所以是19个
+pose_aa_h1 = torch.cat([torch.zeros((1, 1, 3)), H1_ROTATION_AXIS * dof_pos[..., None], torch.zeros((1, 2, 3))], axis = 1)#头部+其他+手，变为22个
 
 
 root_trans = torch.zeros((1, 1, 3))    
@@ -86,14 +90,14 @@ for iteration in range(1000):
     root_pos = joints[:, 0]
     joints = (joints - joints[:, 0]) * scale + root_pos
     diff = fk_return.global_translation_extend[:, :, h1_joint_pick_idx] - joints[:, smpl_joint_pick_idx]
-    loss_g = diff.norm(dim = -1).mean() 
+    loss_g = diff.norm(dim = -1).mean() #所有关节位置差的均值
     loss = loss_g
-    if iteration % 100 == 0:
+    if iteration % 100 == 0:#每100次输出
         print(iteration, loss.item() * 1000)
 
-    optimizer_shape.zero_grad()
-    loss.backward()
-    optimizer_shape.step()
+    optimizer_shape.zero_grad()#清零梯度，避免积累
+    loss.backward()#反向传播
+    optimizer_shape.step()#利用优化器更新
 
 os.makedirs("data/h1", exist_ok=True)
 joblib.dump((shape_new.detach(), scale), "data/h1/shape_optimized_v1.pkl") # V2 has hip jointsrea
